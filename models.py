@@ -54,22 +54,20 @@ def train_prophet(df: pd.DataFrame, test_size: int) -> tuple:
     df должен иметь колонки ds (datetime), y (значение).
     """
     if not PROPHET_AVAILABLE:
-        # Fallback: последние 12 мес как шаблон + линейный тренд
+        # Fallback: сезонная декомпозиция (среднее по месяцам) + линейный тренд
         y = df["y"].values
         train, test = y[:-test_size], y[-test_size:]
         n = len(test)
         if len(train) >= 24:
-            last12 = train[-12:]
-            base = np.mean(train)
-            seas = last12 - base
-            # тренд из последних 24 мес
-            x_tr = np.arange(min(24, len(train)))
-            y_tr = train[-len(x_tr):]
-            coef = np.polyfit(x_tr, y_tr, 1)
+            # Сезонная компонента: среднее отклонение по месяцу
+            seasonal = np.array([np.mean(train[i::12]) for i in range(12)]) - np.mean(train)
+            # Тренд: линейная регрессия по всему train
+            x_tr = np.arange(len(train))
+            coef = np.polyfit(x_tr, train, 1)
             pred = []
             for j in range(n):
                 trend_val = np.polyval(coef, len(train) + j)
-                pred.append(trend_val + seas[j % 12])
+                pred.append(trend_val + seasonal[j % 12])
             pred = np.array(pred)
         else:
             pred = np.full(n, np.mean(train))
